@@ -989,6 +989,7 @@ impl Backend for GitBackend {
         _path: &RepoPath,
         id: &FileId,
     ) -> BackendResult<Pin<Box<dyn AsyncRead + Send>>> {
+        println!("Read file. Path: {:?}, Id: {:?}", _path, id);
         let data = self.read_file_sync(id)?;
         Ok(Box::pin(Cursor::new(data)))
     }
@@ -998,6 +999,7 @@ impl Backend for GitBackend {
         _path: &RepoPath,
         contents: &mut (dyn AsyncRead + Send + Unpin),
     ) -> BackendResult<FileId> {
+        println!("Write file. Path: {:?}", _path);
         let mut bytes = Vec::new();
         contents.read_to_end(&mut bytes).await.unwrap();
         let locked_repo = self.lock_git_repo();

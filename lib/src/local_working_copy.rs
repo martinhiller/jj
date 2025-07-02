@@ -74,6 +74,8 @@ use crate::conflicts::materialize_tree_value;
 use crate::conflicts::ConflictMarkerStyle;
 use crate::conflicts::MaterializedTreeValue;
 use crate::conflicts::MIN_CONFLICT_MARKER_LEN;
+use crate::eol::EndOfLine;
+use crate::eol::EndOfLineReadTransformer;
 use crate::file_util::check_symlink_support;
 use crate::file_util::copy_async_to_sync;
 use crate::file_util::try_symlink;
@@ -83,6 +85,9 @@ use crate::fsmonitor::watchman;
 use crate::fsmonitor::FsmonitorSettings;
 #[cfg(feature = "watchman")]
 use crate::fsmonitor::WatchmanConfig;
+use crate::git_attributes::EolAttribute;
+use crate::git_attributes::GitAttributesResolver;
+use crate::git_attributes::TextAttribute;
 use crate::gitignore::GitIgnoreFile;
 use crate::lock::FileLock;
 use crate::matchers::DifferenceMatcher;
@@ -1840,6 +1845,10 @@ impl TreeState {
                 }
             })
             .buffered(self.store.concurrency().max(1));
+
+        let mut git_attributes_resolver =
+            GitAttributesResolver::new(new_tree, Arc::clone(&self.store));
+
         while let Some((path, data)) = diff_stream.next().await {
             let (before, after) = data?;
             if after.is_absent() {
@@ -1896,7 +1905,22 @@ impl TreeState {
                     continue;
                 }
                 MaterializedTreeValue::File(file) => {
-                    self.write_file(&disk_path, file.reader, file.executable)?
+                    let attributes = git_attributes_resolver.resolve(&path).await;
+                    eprintln!("Attributes for path {path:?}: {attributes:?}");
+                    if (attributes.text == TextAttribute::Set
+                        || attributes.text == TextAttribute::Auto)
+                        && attributes.eol != EolAttribute::Unspecified
+                    {
+                        let eol: EndOfLine = match attributes.eol {
+                            EolAttribute::Lf => EndOfLine::Lf,
+                            EolAttribute::Crlf => EndOfLine::Crlf,
+                            _ => unreachable!(),
+                        };
+                        let wrapped = EndOfLineReadTransformer::new(file.reader, eol);
+                        self.write_file(&disk_path, wrapped, file.executable)?
+                    } else {
+                        self.write_file(&disk_path, file.reader, file.executable)?
+                    }
                 }
                 MaterializedTreeValue::Symlink { id: _, target } => {
                     if self.symlink_support {

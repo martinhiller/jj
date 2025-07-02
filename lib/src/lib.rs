@@ -42,6 +42,7 @@ pub mod default_index;
 pub mod default_submodule_store;
 pub mod diff;
 pub mod dsl_util;
+pub mod eol;
 pub mod evolution;
 pub mod extensions_map;
 pub mod file_util;
@@ -66,6 +67,7 @@ pub mod git {
         false
     }
 }
+pub mod git_attributes;
 #[cfg(feature = "git")]
 pub mod git_backend;
 #[cfg(feature = "git")]
